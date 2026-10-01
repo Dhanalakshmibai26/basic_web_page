@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Snakes and Ladders</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef3e8;--ink:#23311f;--c1:#f7e9b8;--c2:#cfe3b4;--panel:#fff;--snake:#c2410c;--ladder:#7c4a1e;--p1:#2563eb;--p2:#db2777}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a2218;--ink:#e8f0df;--c1:#3a4a2c;--c2:#2c3a22;--panel:#26331f}}
+:root[data-theme="dark"]{--bg:#1a2218;--ink:#e8f0df;--c1:#3a4a2c;--c2:#2c3a22;--panel:#26331f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,"Times New Roman",serif;display:flex;flex-direction:column;align-items:center;padding:16px}
+h1{margin:4px 0 12px;font-size:1.6rem}
+#wrap{position:relative;width:min(92vw,520px);aspect-ratio:1}
+#board{display:grid;grid-template-columns:repeat(10,1fr);width:100%;height:100%;border:3px solid var(--ink);border-radius:6px;overflow:hidden}
+.cell{position:relative;font-size:clamp(8px,2vw,12px);padding:2px;font-family:system-ui,sans-serif}
+#lines{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
+.tok{position:absolute;width:4.2%;aspect-ratio:1;border-radius:50%;border:2px solid #fff;transition:left .25s,top .25s;box-shadow:0 1px 4px #0006}
+#panel{margin-top:14px;background:var(--panel);padding:14px 18px;border-radius:10px;width:min(92vw,520px);display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+#die{font-size:2.4rem;width:3.2rem;text-align:center}
+button{font:inherit;padding:10px 18px;border:2px solid var(--ink);background:var(--c1);color:var(--ink);border-radius:8px;cursor:pointer}
+button:focus-visible{outline:3px solid var(--p1);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+#msg{flex:1 1 100%;min-height:1.4em}
+.dot{display:inline-block;width:.8em;height:.8em;border-radius:50%;margin-right:.3em}
+</style>
+</head>
+<body>
+<h1>Snakes and Ladders</h1>
+<div id="wrap">
+  <div id="board"></div>
+  <svg id="lines" viewBox="0 0 100 100"></svg>
+</div>
+<div id="panel">
+  <div id="die" aria-live="polite">🎲</div>
+  <button id="roll">Roll die</button>
+  <button id="reset">New game</button>
+  <div id="msg" aria-live="polite"></div>
+</div>
+<script>
+const LADDERS={4:25,13:46,27:56,33:49,42:63,50:69,62:81,74:92};
+const SNAKES={99:41,95:75,89:53,70:30,64:60,47:26,37:3,16:6};
+const COLORS=['#2563eb','#db2777'];
+const names=['Blue','Pink'];
+let pos,turn,over,busy;
+
+const board=document.getElementById('board'),svg=document.getElementById('lines'),wrap=document.getElementById('wrap');
+// square n (1..100) -> center in % (x,y), boustrophedon from bottom-left
+function xy(n){const i=n-1,row=Math.floor(i/10);let col=i%10;if(row%2)col=9-col;return{x:col*10+5,y:(9-row)*10+5}}
+
+for(let r=0;r<10;r++)for(let c=0;c<10;c++){
+  const rowFromBottom=9-r;let col=c;if(rowFromBottom%2)col=9-c;
+  const n=rowFromBottom*10+col+1;
+  const d=document.createElement('div');d.className='cell';d.textContent=n;
+  d.style.background=((r+c)%2)?'var(--c1)':'var(--c2)';board.appendChild(d);
+}
+function line(a,b,color,dash){
+  const p=xy(a),q=xy(b);
+  svg.insertAdjacentHTML('beforeend',`<line x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}" stroke="${color}" stroke-width="${dash?1.6:1.2}" stroke-linecap="round" ${dash?'':'stroke-dasharray="0"'} opacity=".85"/>`);
+}
+for(const a in LADDERS){ // two rails look like a ladder
+  const p=xy(+a),q=xy(LADDERS[a]);const dx=q.y-p.y,dy=p.x-q.x,L=Math.hypot(dx,dy)||1,ox=dx/L*1.2,oy=dy/L*1.2;
+  for(const s of[-1,1])svg.insertAdjacentHTML('beforeend',`<line x1="${p.x+s*ox}" y1="${p.y+s*oy}" x2="${q.x+s*ox}" y2="${q.y+s*oy}" stroke="#7c4a1e" stroke-width=".8"/>`);
+  for(let t=.15;t<1;t+=.14)svg.insertAdjacentHTML('beforeend',`<line x1="${p.x+(q.x-p.x)*t-ox}" y1="${p.y+(q.y-p.y)*t-oy}" x2="${p.x+(q.x-p.x)*t+ox}" y2="${p.y+(q.y-p.y)*t+oy}" stroke="#7c4a1e" stroke-width=".6"/>`);
+}
+for(const a in SNAKES)line(+a,SNAKES[a],'#c2410c',true);
+for(const a in SNAKES){const p=xy(+a);svg.insertAdjacentHTML('beforeend',`<circle cx="${p.x}" cy="${p.y}" r="1.8" fill="#c2410c"/>`)}
+
+const toks=COLORS.map(c=>{const t=document.createElement('div');t.className='tok';t.style.background=c;wrap.appendChild(t);return t});
+function place(i){
+  const p=pos[i]===0?{x:-4,y:95}:xy(pos[i]);
+  const off=i?1.5:-1.5;
+  toks[i].style.left=(p.x+off-2.1)+'%';toks[i].style.top=(p.y+off-2.1)+'%';
+}
+const msg=document.getElementById('msg'),die=document.getElementById('die'),rollBtn=document.getElementById('roll');
+const say=t=>msg.innerHTML=t;
+const who=i=>`<span class="dot" style="background:${COLORS[i]}"></span>${names[i]}`;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+function reset(){pos=[0,0];turn=0;over=false;busy=false;rollBtn.disabled=false;place(0);place(1);die.textContent='🎲';say(`${who(0)} to roll.`)}
+
+async function roll(){
+  if(over||busy)return;busy=true;rollBtn.disabled=true;
+  const faces='⚀⚁⚂⚃⚄⚅';
+  for(let k=0;k<8;k++){die.textContent=faces[Math.floor(Math.random()*6)];await sleep(60)}
+  const v=1+Math.floor(Math.random()*6);die.textContent=faces[v-1];
+  const i=turn;
+  if(pos[i]+v>100){say(`${who(i)} rolled ${v}. Needs an exact roll to reach 100.`)}
+  else{
+    for(let s=0;s<v;s++){pos[i]++;place(i);await sleep(150)}
+    if(LADDERS[pos[i]]){say(`${who(i)} climbs a ladder to ${LADDERS[pos[i]]}!`);await sleep(400);pos[i]=LADDERS[pos[i]];place(i);await sleep(400)}
+    else if(SNAKES[pos[i]]){say(`${who(i)} slides down a snake to ${SNAKES[pos[i]]}.`);await sleep(400);pos[i]=SNAKES[pos[i]];place(i);await sleep(400)}
+    if(pos[i]===100){over=true;say(`${who(i)} wins! Press New game to play again.`);busy=false;return}
+  }
+  turn=1-turn;say(`${who(turn)} to roll.`);busy=false;rollBtn.disabled=false;
+}
+rollBtn.onclick=roll;document.getElementById('reset').onclick=reset;
+reset();
+</script>
+</body>
+</html>
